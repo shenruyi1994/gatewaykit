@@ -9,7 +9,22 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Sequence, Type
 
 from gatewaykit.config import RouteConfig
+from gatewaykit.proxy import UpstreamResponse, proxy_get
 from gatewaykit.router import find_route
+
+
+RESPONSE_HEADERS_NOT_FORWARDED = {
+    "connection",
+    "date",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "server",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+}
 
 
 def make_handler(
@@ -54,7 +69,19 @@ def make_handler(
                 self.end_headers()
                 return
 
+            if self.command == "GET":
+                self._write_upstream_response(proxy_get(route, self.path))
+                return
+
             self.send_error(HTTPStatus.NOT_IMPLEMENTED, "proxying not implemented")
+
+        def _write_upstream_response(self, response: UpstreamResponse) -> None:
+            self.send_response(response.status, response.reason)
+            for name, value in response.headers:
+                if name.lower() not in RESPONSE_HEADERS_NOT_FORWARDED:
+                    self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(response.body)
 
         def _write_json(self, status: HTTPStatus, payload: object) -> None:
             body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
