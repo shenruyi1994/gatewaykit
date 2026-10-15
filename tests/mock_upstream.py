@@ -1,6 +1,7 @@
 """A small upstream HTTP service used by the gateway tests."""
 
 import json
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -13,6 +14,9 @@ class MockUpstreamHandler(BaseHTTPRequestHandler):
         self._echo_request()
 
     def _echo_request(self) -> None:
+        if self.path.startswith("/slow"):
+            time.sleep(0.1)
+
         content_length = int(self.headers.get("Content-Length", "0"))
         request_body = self.rfile.read(content_length).decode("utf-8")
         body = json.dumps(
@@ -30,7 +34,10 @@ class MockUpstreamHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except BrokenPipeError:
+            pass
 
     def log_message(self, format: str, *args: object) -> None:
         pass

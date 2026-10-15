@@ -18,6 +18,7 @@ def route(balance: str, first_weight: int = 1) -> RouteConfig:
             ),
             balance=balance,
         ),
+        timeout=None,
     )
 
 

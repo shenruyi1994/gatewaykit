@@ -47,6 +47,7 @@ class RoutingHTTPTest(unittest.TestCase):
                 ),
                 balance=None,
             ),
+            timeout=None,
         )
         products_route = RouteConfig(
             path="/api/products",
@@ -67,6 +68,7 @@ class RoutingHTTPTest(unittest.TestCase):
                 ),
                 balance="weighted_round_robin",
             ),
+            timeout=0.05,
         )
         self.server = create_server(
             port=0,
@@ -184,6 +186,13 @@ class RoutingHTTPTest(unittest.TestCase):
 
         self.assertEqual(response.status, HTTPStatus.BAD_GATEWAY)
         self.assertEqual(body, {"error": "bad_gateway"})
+
+    def test_slow_product_upstream_returns_504(self) -> None:
+        response = self.request("GET", "/api/products/slow")
+        body = json.loads(response.read())
+
+        self.assertEqual(response.status, HTTPStatus.GATEWAY_TIMEOUT)
+        self.assertEqual(body, {"error": "gateway_timeout"})
 
     def test_unavailable_upstream_returns_502(self) -> None:
         self.upstream.shutdown()

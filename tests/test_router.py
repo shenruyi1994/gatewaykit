@@ -15,6 +15,7 @@ def route(path: str) -> RouteConfig:
             targets=(UpstreamTarget("http://localhost:3001", 1),),
             balance=None,
         ),
+        timeout=None,
     )
 
 

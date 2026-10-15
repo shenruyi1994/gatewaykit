@@ -1,5 +1,6 @@
 """Forward requests to a route's upstream service."""
 
+import socket
 from dataclasses import dataclass
 from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from typing import List, Mapping, Optional, Tuple
@@ -24,6 +25,10 @@ REQUEST_HEADERS_NOT_FORWARDED = {
 
 class UpstreamError(RuntimeError):
     """Raised when an upstream request fails at the HTTP transport layer."""
+
+
+class UpstreamTimeout(UpstreamError):
+    """Raised when an upstream does not respond within its configured timeout."""
 
 
 @dataclass(frozen=True)
@@ -61,7 +66,11 @@ def proxy_request(
     }
 
     upstream_target = _upstream_target(route, request_target)
-    connection = connection_class(upstream.hostname, upstream.port)
+    connection = connection_class(
+        upstream.hostname,
+        upstream.port,
+        timeout=route.timeout,
+    )
     try:
         connection.request(
             method,
@@ -76,6 +85,8 @@ def proxy_request(
             headers=response.getheaders(),
             body=response.read(),
         )
+    except socket.timeout as error:
+        raise UpstreamTimeout(f"upstream request timed out: {error}") from error
     except (HTTPException, OSError) as error:
         raise UpstreamError(f"upstream request failed: {error}") from error
     finally:

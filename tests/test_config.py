@@ -42,6 +42,7 @@ gateway:
         self.assertEqual(route.upstream.targets[0].url, "http://localhost:3001")
         self.assertEqual(route.upstream.targets[0].weight, 1)
         self.assertIsNone(route.upstream.balance)
+        self.assertIsNone(route.timeout)
 
     def test_loads_multiple_upstream_targets(self) -> None:
         document = """\
@@ -58,6 +59,7 @@ gateway:
           - url: http://localhost:3004
             weight: 1
         balance: weighted_round_robin
+      timeout: 50ms
 """
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "gateway.yaml"
@@ -70,6 +72,7 @@ gateway:
             [("http://localhost:3003", 3), ("http://localhost:3004", 1)],
         )
         self.assertEqual(route.upstream.balance, "weighted_round_robin")
+        self.assertEqual(route.timeout, 0.05)
 
     def test_missing_file_has_clear_error(self) -> None:
         with self.assertRaisesRegex(ConfigError, "cannot read"):

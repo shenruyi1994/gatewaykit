@@ -10,7 +10,12 @@ from typing import Optional, Sequence, Type
 
 from gatewaykit.config import RouteConfig
 from gatewaykit.load_balancer import LoadBalancer
-from gatewaykit.proxy import UpstreamError, UpstreamResponse, proxy_request
+from gatewaykit.proxy import (
+    UpstreamError,
+    UpstreamResponse,
+    UpstreamTimeout,
+    proxy_request,
+)
 from gatewaykit.router import find_route
 
 
@@ -86,6 +91,12 @@ def make_handler(
                         headers=dict(self.headers.items()),
                         body=body,
                     )
+                except UpstreamTimeout:
+                    self._write_json(
+                        HTTPStatus.GATEWAY_TIMEOUT,
+                        {"error": "gateway_timeout"},
+                    )
+                    return
                 except UpstreamError:
                     self._write_json(
                         HTTPStatus.BAD_GATEWAY,

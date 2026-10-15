@@ -1,10 +1,14 @@
 """GatewayKit configuration loading."""
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
+
+
+DURATION_PATTERN = re.compile(r"^(\d+(?:\.\d+)?)(ms|s|m)$")
 
 
 class ConfigError(ValueError):
@@ -29,6 +33,7 @@ class RouteConfig:
     methods: tuple[str, ...]
     strip_prefix: bool
     upstream: UpstreamConfig
+    timeout: Optional[float]
 
 
 @dataclass(frozen=True)
@@ -83,12 +88,19 @@ def _load_route(document: Any, index: int) -> RouteConfig:
     if not isinstance(strip_prefix, bool):
         raise ConfigError(f"{location}.strip_prefix must be a boolean")
     upstream = _load_upstream(upstream_document, f"{location}.upstream")
+    timeout_document = document.get("timeout")
+    timeout = (
+        _parse_duration(timeout_document, f"{location}.timeout")
+        if timeout_document is not None
+        else None
+    )
 
     return RouteConfig(
         path=path,
         methods=tuple(method.upper() for method in methods),
         strip_prefix=strip_prefix,
         upstream=upstream,
+        timeout=timeout,
     )
 
 
@@ -136,3 +148,20 @@ def _load_target(document: Any, index: int, location: str) -> UpstreamTarget:
     if not isinstance(weight, int) or isinstance(weight, bool) or weight < 1:
         raise ConfigError(f"{target_location}.weight must be a positive integer")
     return UpstreamTarget(url=url, weight=weight)
+
+
+def _parse_duration(value: Any, location: str) -> float:
+    if not isinstance(value, str):
+        raise ConfigError(f"{location} must be a duration string")
+
+    match = DURATION_PATTERN.fullmatch(value)
+    if match is None:
+        raise ConfigError(f"{location} must use ms, s, or m units")
+
+    amount = float(match.group(1))
+    if amount <= 0:
+        raise ConfigError(f"{location} must be greater than zero")
+
+    unit = match.group(2)
+    multiplier = {"ms": 0.001, "s": 1.0, "m": 60.0}[unit]
+    return amount * multiplier
