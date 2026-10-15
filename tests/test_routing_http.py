@@ -48,6 +48,7 @@ class RoutingHTTPTest(unittest.TestCase):
                 balance=None,
             ),
             timeout=None,
+            health_check=None,
         )
         products_route = RouteConfig(
             path="/api/products",
@@ -69,6 +70,7 @@ class RoutingHTTPTest(unittest.TestCase):
                 balance="weighted_round_robin",
             ),
             timeout=0.05,
+            health_check=None,
         )
         self.server = create_server(
             port=0,

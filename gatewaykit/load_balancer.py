@@ -1,6 +1,6 @@
 """Select an upstream target for each routed request."""
 
-from typing import Dict
+from typing import Callable, Dict
 
 from gatewaykit.config import RouteConfig, UpstreamTarget
 
@@ -9,8 +9,16 @@ class LoadBalancer:
     def __init__(self) -> None:
         self._positions: Dict[RouteConfig, int] = {}
 
-    def select_target(self, route: RouteConfig) -> UpstreamTarget:
-        targets = route.upstream.targets
+    def select_target(
+        self,
+        route: RouteConfig,
+        is_healthy: Callable[[UpstreamTarget], bool] = lambda target: True,
+    ) -> UpstreamTarget:
+        targets = tuple(
+            target for target in route.upstream.targets if is_healthy(target)
+        )
+        if not targets:
+            raise NoHealthyTargets("no healthy upstream targets are available")
         if len(targets) == 1:
             return targets[0]
 
@@ -29,3 +37,6 @@ class LoadBalancer:
 
         raise ValueError("multiple upstream targets require a balancing strategy")
 
+
+class NoHealthyTargets(RuntimeError):
+    """Raised when all targets for a route are unhealthy."""

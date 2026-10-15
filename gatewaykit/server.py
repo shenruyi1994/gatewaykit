@@ -9,7 +9,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional, Sequence, Type
 
 from gatewaykit.config import RouteConfig
-from gatewaykit.load_balancer import LoadBalancer
+from gatewaykit.health import HealthMonitor
+from gatewaykit.load_balancer import LoadBalancer, NoHealthyTargets
 from gatewaykit.proxy import (
     UpstreamError,
     UpstreamResponse,
@@ -36,6 +37,7 @@ RESPONSE_HEADERS_NOT_FORWARDED = {
 def make_handler(
     started_at: float,
     routes: Sequence[RouteConfig],
+    health_monitor: HealthMonitor,
 ) -> Type[BaseHTTPRequestHandler]:
     load_balancer = LoadBalancer()
 
@@ -82,7 +84,13 @@ def make_handler(
                 if body is None and self.command == "POST":
                     return
                 try:
-                    target = load_balancer.select_target(route)
+                    target = load_balancer.select_target(
+                        route,
+                        is_healthy=lambda candidate: health_monitor.is_healthy(
+                            route,
+                            candidate,
+                        ),
+                    )
                     response = proxy_request(
                         route=route,
                         upstream_url=target.url,
@@ -91,6 +99,12 @@ def make_handler(
                         headers=dict(self.headers.items()),
                         body=body,
                     )
+                except NoHealthyTargets:
+                    self._write_json(
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                        {"error": "no_healthy_upstreams"},
+                    )
+                    return
                 except UpstreamTimeout:
                     self._write_json(
                         HTTPStatus.GATEWAY_TIMEOUT,
@@ -139,13 +153,29 @@ def make_handler(
     return GatewayHandler
 
 
+class GatewayHTTPServer(HTTPServer):
+    def __init__(self, *args, health_monitor: HealthMonitor, **kwargs) -> None:
+        self.health_monitor = health_monitor
+        super().__init__(*args, **kwargs)
+        self.health_monitor.start()
+
+    def server_close(self) -> None:
+        self.health_monitor.stop()
+        super().server_close()
+
+
 def create_server(
     port: int,
     routes: Sequence[RouteConfig] = (),
     host: str = "",
 ) -> HTTPServer:
     started_at = time.monotonic()
-    return HTTPServer((host, port), make_handler(started_at, routes))
+    health_monitor = HealthMonitor(routes)
+    return GatewayHTTPServer(
+        (host, port),
+        make_handler(started_at, routes, health_monitor),
+        health_monitor=health_monitor,
+    )
 
 
 def serve(port: int, routes: Sequence[RouteConfig] = ()) -> None:

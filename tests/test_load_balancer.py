@@ -3,7 +3,7 @@
 import unittest
 
 from gatewaykit.config import RouteConfig, UpstreamConfig, UpstreamTarget
-from gatewaykit.load_balancer import LoadBalancer
+from gatewaykit.load_balancer import LoadBalancer, NoHealthyTargets
 
 
 def route(balance: str, first_weight: int = 1) -> RouteConfig:
@@ -19,6 +19,7 @@ def route(balance: str, first_weight: int = 1) -> RouteConfig:
             balance=balance,
         ),
         timeout=None,
+        health_check=None,
     )
 
 
@@ -53,6 +54,24 @@ class LoadBalancerTest(unittest.TestCase):
                 "http://second",
             ],
         )
+
+    def test_unhealthy_target_is_skipped(self) -> None:
+        products = route("weighted_round_robin", first_weight=3)
+        balancer = LoadBalancer()
+
+        selected = balancer.select_target(
+            products,
+            is_healthy=lambda target: target.url == "http://second",
+        )
+
+        self.assertEqual(selected.url, "http://second")
+
+    def test_all_unhealthy_targets_raise_no_healthy_targets(self) -> None:
+        products = route("weighted_round_robin", first_weight=3)
+        balancer = LoadBalancer()
+
+        with self.assertRaises(NoHealthyTargets):
+            balancer.select_target(products, is_healthy=lambda target: False)
 
 
 if __name__ == "__main__":

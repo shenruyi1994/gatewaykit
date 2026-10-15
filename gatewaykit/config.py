@@ -28,12 +28,20 @@ class UpstreamConfig:
 
 
 @dataclass(frozen=True)
+class HealthCheckConfig:
+    path: str
+    interval: float
+    unhealthy_threshold: int
+
+
+@dataclass(frozen=True)
 class RouteConfig:
     path: str
     methods: tuple[str, ...]
     strip_prefix: bool
     upstream: UpstreamConfig
     timeout: Optional[float]
+    health_check: Optional[HealthCheckConfig]
 
 
 @dataclass(frozen=True)
@@ -94,6 +102,12 @@ def _load_route(document: Any, index: int) -> RouteConfig:
         if timeout_document is not None
         else None
     )
+    health_check_document = document.get("health_check")
+    health_check = (
+        _load_health_check(health_check_document, f"{location}.health_check")
+        if health_check_document is not None
+        else None
+    )
 
     return RouteConfig(
         path=path,
@@ -101,6 +115,7 @@ def _load_route(document: Any, index: int) -> RouteConfig:
         strip_prefix=strip_prefix,
         upstream=upstream,
         timeout=timeout,
+        health_check=health_check,
     )
 
 
@@ -165,3 +180,23 @@ def _parse_duration(value: Any, location: str) -> float:
     unit = match.group(2)
     multiplier = {"ms": 0.001, "s": 1.0, "m": 60.0}[unit]
     return amount * multiplier
+
+
+def _load_health_check(document: Any, location: str) -> HealthCheckConfig:
+    if not isinstance(document, dict):
+        raise ConfigError(f"{location} must be a mapping")
+
+    path = document.get("path")
+    interval = _parse_duration(document.get("interval"), f"{location}.interval")
+    threshold = document.get("unhealthy_threshold")
+
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise ConfigError(f"{location}.path must start with '/'")
+    if not isinstance(threshold, int) or isinstance(threshold, bool) or threshold < 1:
+        raise ConfigError(f"{location}.unhealthy_threshold must be a positive integer")
+
+    return HealthCheckConfig(
+        path=path,
+        interval=interval,
+        unhealthy_threshold=threshold,
+    )

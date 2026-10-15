@@ -17,3 +17,7 @@ gateway:
             weight: 1
         balance: "weighted_round_robin"
       timeout: "10s"
+      health_check:
+        path: "/healthz"
+        interval: "30s"
+        unhealthy_threshold: 3

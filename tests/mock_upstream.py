@@ -8,10 +8,25 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 class MockUpstreamHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
+        if self.path == "/healthz":
+            self._health_response()
+            return
         self._echo_request()
 
     def do_POST(self) -> None:
         self._echo_request()
+
+    def _health_response(self) -> None:
+        status = self.server.health_status
+        body = json.dumps(
+            {"status": "healthy" if status == HTTPStatus.OK else "unhealthy"},
+            separators=(",", ":"),
+        ).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _echo_request(self) -> None:
         if self.path.startswith("/slow"):
@@ -43,12 +58,20 @@ class MockUpstreamHandler(BaseHTTPRequestHandler):
         pass
 
 
-def create_mock_upstream() -> HTTPServer:
-    return HTTPServer(("127.0.0.1", 0), MockUpstreamHandler)
+class MockUpstreamServer(HTTPServer):
+    def __init__(self, address, health_status: HTTPStatus = HTTPStatus.OK) -> None:
+        self.health_status = health_status
+        super().__init__(address, MockUpstreamHandler)
+
+
+def create_mock_upstream(
+    health_status: HTTPStatus = HTTPStatus.OK,
+) -> MockUpstreamServer:
+    return MockUpstreamServer(("127.0.0.1", 0), health_status)
 
 
 def main() -> None:
-    server = HTTPServer(("127.0.0.1", 3001), MockUpstreamHandler)
+    server = MockUpstreamServer(("127.0.0.1", 3001))
     print("Mock upstream listening on http://localhost:3001", flush=True)
     try:
         server.serve_forever()

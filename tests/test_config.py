@@ -43,6 +43,7 @@ gateway:
         self.assertEqual(route.upstream.targets[0].weight, 1)
         self.assertIsNone(route.upstream.balance)
         self.assertIsNone(route.timeout)
+        self.assertIsNone(route.health_check)
 
     def test_loads_multiple_upstream_targets(self) -> None:
         document = """\
@@ -60,6 +61,10 @@ gateway:
             weight: 1
         balance: weighted_round_robin
       timeout: 50ms
+      health_check:
+        path: /healthz
+        interval: 20ms
+        unhealthy_threshold: 2
 """
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "gateway.yaml"
@@ -73,6 +78,9 @@ gateway:
         )
         self.assertEqual(route.upstream.balance, "weighted_round_robin")
         self.assertEqual(route.timeout, 0.05)
+        self.assertEqual(route.health_check.path, "/healthz")
+        self.assertEqual(route.health_check.interval, 0.02)
+        self.assertEqual(route.health_check.unhealthy_threshold, 2)
 
     def test_missing_file_has_clear_error(self) -> None:
         with self.assertRaisesRegex(ConfigError, "cannot read"):
