@@ -57,6 +57,7 @@ class RouteConfig:
 class GatewayConfig:
     port: int
     routes: tuple[RouteConfig, ...]
+    global_timeout: Optional[float]
     global_rate_limit: Optional[RateLimitConfig]
 
 
@@ -84,6 +85,12 @@ def load_config(path: str) -> GatewayConfig:
         raise ConfigError("gateway.routes must be a list")
 
     routes = tuple(_load_route(route, index) for index, route in enumerate(routes_document))
+    global_timeout_document = gateway.get("global_timeout")
+    global_timeout = (
+        _parse_duration(global_timeout_document, "gateway.global_timeout")
+        if global_timeout_document is not None
+        else None
+    )
     global_rate_limit_document = gateway.get("global_rate_limit")
     global_rate_limit = (
         _load_rate_limit(
@@ -96,6 +103,7 @@ def load_config(path: str) -> GatewayConfig:
     return GatewayConfig(
         port=port,
         routes=routes,
+        global_timeout=global_timeout,
         global_rate_limit=global_rate_limit,
     )
 

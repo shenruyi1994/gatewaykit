@@ -4,6 +4,7 @@ import json
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlsplit
 
 
 class MockUpstreamHandler(BaseHTTPRequestHandler):
@@ -29,7 +30,7 @@ class MockUpstreamHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _echo_request(self) -> None:
-        if self.path.startswith("/slow"):
+        if urlsplit(self.path).path.endswith("/slow"):
             time.sleep(0.1)
 
         content_length = int(self.headers.get("Content-Length", "0"))

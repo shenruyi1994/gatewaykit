@@ -46,6 +46,7 @@ def proxy_request(
     request_target: str,
     headers: Mapping[str, str],
     body: Optional[bytes],
+    timeout: float,
 ) -> UpstreamResponse:
     """Forward one request while preserving its method, target, and body."""
     upstream = urlsplit(upstream_url)
@@ -69,7 +70,7 @@ def proxy_request(
     connection = connection_class(
         upstream.hostname,
         upstream.port,
-        timeout=route.timeout,
+        timeout=timeout,
     )
     try:
         connection.request(

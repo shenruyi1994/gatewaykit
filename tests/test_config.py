@@ -21,6 +21,7 @@ class ConfigTest(unittest.TestCase):
         document = """\
 gateway:
   port: 8080
+  global_timeout: 30s
   global_rate_limit:
     requests: 100
     window: 60s
@@ -58,6 +59,7 @@ gateway:
         self.assertEqual(route.rate_limit.window, 60)
         self.assertEqual(route.rate_limit.strategy, "sliding_window")
         self.assertEqual(route.rate_limit.per, "ip")
+        self.assertEqual(config.global_timeout, 30)
         self.assertEqual(config.global_rate_limit.requests, 100)
         self.assertEqual(config.global_rate_limit.window, 60)
         self.assertEqual(config.global_rate_limit.strategy, "fixed_window")

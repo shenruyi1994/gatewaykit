@@ -33,12 +33,14 @@ RESPONSE_HEADERS_NOT_FORWARDED = {
     "transfer-encoding",
     "upgrade",
 }
+DEFAULT_UPSTREAM_TIMEOUT = 30.0
 
 
 def make_handler(
     started_at: float,
     routes: Sequence[RouteConfig],
     health_monitor: HealthMonitor,
+    global_timeout: Optional[float],
     global_rate_limit: Optional[RateLimitConfig],
 ) -> Type[BaseHTTPRequestHandler]:
     load_balancer = LoadBalancer()
@@ -116,6 +118,11 @@ def make_handler(
                         request_target=self.path,
                         headers=dict(self.headers.items()),
                         body=body,
+                        timeout=(
+                            route.timeout
+                            if route.timeout is not None
+                            else global_timeout or DEFAULT_UPSTREAM_TIMEOUT
+                        ),
                     )
                 except NoHealthyTargets:
                     self._write_json(
@@ -193,13 +200,20 @@ def create_server(
     port: int,
     routes: Sequence[RouteConfig] = (),
     host: str = "",
+    global_timeout: Optional[float] = None,
     global_rate_limit: Optional[RateLimitConfig] = None,
 ) -> HTTPServer:
     started_at = time.monotonic()
     health_monitor = HealthMonitor(routes)
     return GatewayHTTPServer(
         (host, port),
-        make_handler(started_at, routes, health_monitor, global_rate_limit),
+        make_handler(
+            started_at,
+            routes,
+            health_monitor,
+            global_timeout,
+            global_rate_limit,
+        ),
         health_monitor=health_monitor,
     )
 
@@ -207,9 +221,15 @@ def create_server(
 def serve(
     port: int,
     routes: Sequence[RouteConfig] = (),
+    global_timeout: Optional[float] = None,
     global_rate_limit: Optional[RateLimitConfig] = None,
 ) -> None:
-    server = create_server(port, routes, global_rate_limit=global_rate_limit)
+    server = create_server(
+        port,
+        routes,
+        global_timeout=global_timeout,
+        global_rate_limit=global_rate_limit,
+    )
     print(f"GatewayKit listening on http://localhost:{port}", flush=True)
     try:
         server.serve_forever()

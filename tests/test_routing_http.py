@@ -78,6 +78,7 @@ class RoutingHTTPTest(unittest.TestCase):
             port=0,
             routes=(users_route, products_route),
             host="127.0.0.1",
+            global_timeout=0.05,
         )
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
@@ -193,6 +194,13 @@ class RoutingHTTPTest(unittest.TestCase):
 
     def test_slow_product_upstream_returns_504(self) -> None:
         response = self.request("GET", "/api/products/slow")
+        body = json.loads(response.read())
+
+        self.assertEqual(response.status, HTTPStatus.GATEWAY_TIMEOUT)
+        self.assertEqual(body, {"error": "gateway_timeout"})
+
+    def test_slow_users_upstream_uses_global_timeout(self) -> None:
+        response = self.request("GET", "/api/users/slow")
         body = json.loads(response.read())
 
         self.assertEqual(response.status, HTTPStatus.GATEWAY_TIMEOUT)

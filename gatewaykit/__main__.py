@@ -22,6 +22,7 @@ def main() -> None:
     serve(
         port=config.port,
         routes=config.routes,
+        global_timeout=config.global_timeout,
         global_rate_limit=config.global_rate_limit,
     )
 
