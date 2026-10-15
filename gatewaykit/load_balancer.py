@@ -1,5 +1,6 @@
 """Select an upstream target for each routed request."""
 
+import threading
 from typing import Callable, Dict
 
 from gatewaykit.config import RouteConfig, UpstreamTarget
@@ -8,6 +9,7 @@ from gatewaykit.config import RouteConfig, UpstreamTarget
 class LoadBalancer:
     def __init__(self) -> None:
         self._positions: Dict[RouteConfig, int] = {}
+        self._lock = threading.Lock()
 
     def select_target(
         self,
@@ -22,8 +24,9 @@ class LoadBalancer:
         if len(targets) == 1:
             return targets[0]
 
-        position = self._positions.get(route, 0)
-        self._positions[route] = position + 1
+        with self._lock:
+            position = self._positions.get(route, 0)
+            self._positions[route] = position + 1
 
         if route.upstream.balance == "round_robin":
             return targets[position % len(targets)]

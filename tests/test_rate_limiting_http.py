@@ -3,6 +3,8 @@
 import json
 import threading
 import unittest
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from http.client import HTTPConnection
 
@@ -92,6 +94,38 @@ class RateLimitingHTTPTest(unittest.TestCase):
 
         self.assertEqual(blocked.status, HTTPStatus.TOO_MANY_REQUESTS)
         self.assertEqual(body, {"error": "rate_limit_exceeded"})
+
+    def test_fifty_simultaneous_requests_enforce_one_atomic_limit(self) -> None:
+        request_count = 50
+        start = threading.Barrier(request_count)
+
+        def send_request(_: int) -> int:
+            connection = HTTPConnection(
+                "127.0.0.1",
+                self.server.server_address[1],
+                timeout=2,
+            )
+            try:
+                start.wait()
+                connection.request("GET", "/api/products")
+                response = connection.getresponse()
+                response.read()
+                return response.status
+            finally:
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=request_count) as executor:
+            statuses = list(executor.map(send_request, range(request_count)))
+
+        self.assertEqual(
+            Counter(statuses),
+            Counter(
+                {
+                    HTTPStatus.OK: 2,
+                    HTTPStatus.TOO_MANY_REQUESTS: 48,
+                }
+            ),
+        )
 
 
 if __name__ == "__main__":

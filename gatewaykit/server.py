@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import Optional, Sequence, Tuple, Type
 
 from gatewaykit.config import RateLimitConfig, RouteConfig
@@ -180,7 +180,10 @@ def make_handler(
     return GatewayHandler
 
 
-class GatewayHTTPServer(HTTPServer):
+class GatewayHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+    request_queue_size = 128
+
     def __init__(self, *args, health_monitor: HealthMonitor, **kwargs) -> None:
         self.health_monitor = health_monitor
         super().__init__(*args, **kwargs)

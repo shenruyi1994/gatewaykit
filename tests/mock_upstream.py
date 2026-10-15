@@ -3,7 +3,7 @@
 import json
 import time
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
 
@@ -61,7 +61,10 @@ class MockUpstreamHandler(BaseHTTPRequestHandler):
         pass
 
 
-class MockUpstreamServer(HTTPServer):
+class MockUpstreamServer(ThreadingHTTPServer):
+    daemon_threads = True
+    request_queue_size = 128
+
     def __init__(self, address, health_status: HTTPStatus = HTTPStatus.OK) -> None:
         self.health_status = health_status
         super().__init__(address, MockUpstreamHandler)

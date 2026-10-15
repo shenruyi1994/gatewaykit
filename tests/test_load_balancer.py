@@ -1,6 +1,8 @@
 """Tests for upstream target selection."""
 
 import unittest
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 
 from gatewaykit.config import RouteConfig, UpstreamConfig, UpstreamTarget
 from gatewaykit.load_balancer import LoadBalancer, NoHealthyTargets
@@ -73,6 +75,23 @@ class LoadBalancerTest(unittest.TestCase):
 
         with self.assertRaises(NoHealthyTargets):
             balancer.select_target(products, is_healthy=lambda target: False)
+
+    def test_weighted_selection_is_consistent_under_concurrency(self) -> None:
+        products = route("weighted_round_robin", first_weight=3)
+        balancer = LoadBalancer()
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            selected = list(
+                executor.map(
+                    lambda _: balancer.select_target(products).url,
+                    range(80),
+                )
+            )
+
+        self.assertEqual(
+            Counter(selected),
+            Counter({"http://first": 60, "http://second": 20}),
+        )
 
 
 if __name__ == "__main__":
