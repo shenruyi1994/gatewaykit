@@ -8,7 +8,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional, Sequence, Type
 
-from gatewaykit.config import RouteConfig
+from gatewaykit.config import RateLimitConfig, RouteConfig
 from gatewaykit.health import HealthMonitor
 from gatewaykit.load_balancer import LoadBalancer, NoHealthyTargets
 from gatewaykit.proxy import (
@@ -17,6 +17,7 @@ from gatewaykit.proxy import (
     UpstreamTimeout,
     proxy_request,
 )
+from gatewaykit.rate_limiter import RateLimiter
 from gatewaykit.router import find_route
 
 
@@ -38,8 +39,10 @@ def make_handler(
     started_at: float,
     routes: Sequence[RouteConfig],
     health_monitor: HealthMonitor,
+    global_rate_limit: Optional[RateLimitConfig],
 ) -> Type[BaseHTTPRequestHandler]:
     load_balancer = LoadBalancer()
+    rate_limiter = RateLimiter()
 
     class GatewayHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -78,6 +81,21 @@ def make_handler(
                 self.send_header("Allow", ", ".join(route.methods))
                 self.end_headers()
                 return
+
+            rate_limit = route.rate_limit or global_rate_limit
+            if rate_limit is not None:
+                decision = rate_limiter.check(
+                    route,
+                    rate_limit,
+                    self.client_address[0],
+                )
+                if not decision.allowed:
+                    self._write_json(
+                        HTTPStatus.TOO_MANY_REQUESTS,
+                        {"error": "rate_limit_exceeded"},
+                        headers={"Retry-After": str(decision.retry_after)},
+                    )
+                    return
 
             if self.command in ("GET", "POST"):
                 body = self._read_request_body() if self.command == "POST" else None
@@ -142,11 +160,18 @@ def make_handler(
             self.end_headers()
             self.wfile.write(response.body)
 
-        def _write_json(self, status: HTTPStatus, payload: object) -> None:
+        def _write_json(
+            self,
+            status: HTTPStatus,
+            payload: object,
+            headers: Optional[dict[str, str]] = None,
+        ) -> None:
             body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(body)
 
@@ -168,18 +193,23 @@ def create_server(
     port: int,
     routes: Sequence[RouteConfig] = (),
     host: str = "",
+    global_rate_limit: Optional[RateLimitConfig] = None,
 ) -> HTTPServer:
     started_at = time.monotonic()
     health_monitor = HealthMonitor(routes)
     return GatewayHTTPServer(
         (host, port),
-        make_handler(started_at, routes, health_monitor),
+        make_handler(started_at, routes, health_monitor, global_rate_limit),
         health_monitor=health_monitor,
     )
 
 
-def serve(port: int, routes: Sequence[RouteConfig] = ()) -> None:
-    server = create_server(port, routes)
+def serve(
+    port: int,
+    routes: Sequence[RouteConfig] = (),
+    global_rate_limit: Optional[RateLimitConfig] = None,
+) -> None:
+    server = create_server(port, routes, global_rate_limit=global_rate_limit)
     print(f"GatewayKit listening on http://localhost:{port}", flush=True)
     try:
         server.serve_forever()

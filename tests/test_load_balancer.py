@@ -20,6 +20,7 @@ def route(balance: str, first_weight: int = 1) -> RouteConfig:
         ),
         timeout=None,
         health_check=None,
+        rate_limit=None,
     )
 
 

@@ -49,6 +49,7 @@ class RoutingHTTPTest(unittest.TestCase):
             ),
             timeout=None,
             health_check=None,
+            rate_limit=None,
         )
         products_route = RouteConfig(
             path="/api/products",
@@ -71,6 +72,7 @@ class RoutingHTTPTest(unittest.TestCase):
             ),
             timeout=0.05,
             health_check=None,
+            rate_limit=None,
         )
         self.server = create_server(
             port=0,

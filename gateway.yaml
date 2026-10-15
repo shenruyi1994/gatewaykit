@@ -1,11 +1,21 @@
 gateway:
   port: 8080
+  global_rate_limit:
+    requests: 100
+    window: "60s"
+    strategy: "fixed_window"
+    per: "ip"
   routes:
     - path: "/api/users"
       methods: ["GET", "POST"]
       strip_prefix: false
       upstream:
         url: "http://localhost:3001"
+      rate_limit:
+        requests: 30
+        window: "60s"
+        strategy: "sliding_window"
+        per: "ip"
     - path: "/api/products"
       methods: ["GET"]
       strip_prefix: true

@@ -17,6 +17,7 @@ def route(path: str) -> RouteConfig:
         ),
         timeout=None,
         health_check=None,
+        rate_limit=None,
     )
 
 

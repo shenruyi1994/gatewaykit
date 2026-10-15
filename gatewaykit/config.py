@@ -35,6 +35,14 @@ class HealthCheckConfig:
 
 
 @dataclass(frozen=True)
+class RateLimitConfig:
+    requests: int
+    window: float
+    strategy: str
+    per: str
+
+
+@dataclass(frozen=True)
 class RouteConfig:
     path: str
     methods: tuple[str, ...]
@@ -42,12 +50,14 @@ class RouteConfig:
     upstream: UpstreamConfig
     timeout: Optional[float]
     health_check: Optional[HealthCheckConfig]
+    rate_limit: Optional[RateLimitConfig]
 
 
 @dataclass(frozen=True)
 class GatewayConfig:
     port: int
     routes: tuple[RouteConfig, ...]
+    global_rate_limit: Optional[RateLimitConfig]
 
 
 def load_config(path: str) -> GatewayConfig:
@@ -74,7 +84,20 @@ def load_config(path: str) -> GatewayConfig:
         raise ConfigError("gateway.routes must be a list")
 
     routes = tuple(_load_route(route, index) for index, route in enumerate(routes_document))
-    return GatewayConfig(port=port, routes=routes)
+    global_rate_limit_document = gateway.get("global_rate_limit")
+    global_rate_limit = (
+        _load_rate_limit(
+            global_rate_limit_document,
+            "gateway.global_rate_limit",
+        )
+        if global_rate_limit_document is not None
+        else None
+    )
+    return GatewayConfig(
+        port=port,
+        routes=routes,
+        global_rate_limit=global_rate_limit,
+    )
 
 
 def _load_route(document: Any, index: int) -> RouteConfig:
@@ -108,6 +131,12 @@ def _load_route(document: Any, index: int) -> RouteConfig:
         if health_check_document is not None
         else None
     )
+    rate_limit_document = document.get("rate_limit")
+    rate_limit = (
+        _load_rate_limit(rate_limit_document, f"{location}.rate_limit")
+        if rate_limit_document is not None
+        else None
+    )
 
     return RouteConfig(
         path=path,
@@ -116,6 +145,7 @@ def _load_route(document: Any, index: int) -> RouteConfig:
         upstream=upstream,
         timeout=timeout,
         health_check=health_check,
+        rate_limit=rate_limit,
     )
 
 
@@ -199,4 +229,31 @@ def _load_health_check(document: Any, location: str) -> HealthCheckConfig:
         path=path,
         interval=interval,
         unhealthy_threshold=threshold,
+    )
+
+
+def _load_rate_limit(document: Any, location: str) -> RateLimitConfig:
+    if not isinstance(document, dict):
+        raise ConfigError(f"{location} must be a mapping")
+
+    requests = document.get("requests")
+    if not isinstance(requests, int) or isinstance(requests, bool) or requests < 1:
+        raise ConfigError(f"{location}.requests must be a positive integer")
+
+    window = _parse_duration(document.get("window"), f"{location}.window")
+    strategy = document.get("strategy")
+    if strategy not in ("fixed_window", "sliding_window"):
+        raise ConfigError(
+            f"{location}.strategy must be fixed_window or sliding_window"
+        )
+
+    bucket_type = document.get("per")
+    if bucket_type not in ("ip", "global"):
+        raise ConfigError(f"{location}.per must be ip or global")
+
+    return RateLimitConfig(
+        requests=requests,
+        window=window,
+        strategy=strategy,
+        per=bucket_type,
     )

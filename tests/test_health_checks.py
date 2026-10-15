@@ -51,6 +51,7 @@ class ProductHealthCheckTest(unittest.TestCase):
                 interval=0.02,
                 unhealthy_threshold=2,
             ),
+            rate_limit=None,
         )
         self.server = create_server(
             port=0,

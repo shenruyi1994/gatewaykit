@@ -21,12 +21,22 @@ class ConfigTest(unittest.TestCase):
         document = """\
 gateway:
   port: 8080
+  global_rate_limit:
+    requests: 100
+    window: 60s
+    strategy: fixed_window
+    per: ip
   routes:
     - path: /api/users
       methods: [GET, POST]
       strip_prefix: false
       upstream:
         url: http://localhost:3001
+      rate_limit:
+        requests: 30
+        window: 60s
+        strategy: sliding_window
+        per: ip
 """
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "gateway.yaml"
@@ -44,6 +54,14 @@ gateway:
         self.assertIsNone(route.upstream.balance)
         self.assertIsNone(route.timeout)
         self.assertIsNone(route.health_check)
+        self.assertEqual(route.rate_limit.requests, 30)
+        self.assertEqual(route.rate_limit.window, 60)
+        self.assertEqual(route.rate_limit.strategy, "sliding_window")
+        self.assertEqual(route.rate_limit.per, "ip")
+        self.assertEqual(config.global_rate_limit.requests, 100)
+        self.assertEqual(config.global_rate_limit.window, 60)
+        self.assertEqual(config.global_rate_limit.strategy, "fixed_window")
+        self.assertEqual(config.global_rate_limit.per, "ip")
 
     def test_loads_multiple_upstream_targets(self) -> None:
         document = """\
@@ -81,6 +99,7 @@ gateway:
         self.assertEqual(route.health_check.path, "/healthz")
         self.assertEqual(route.health_check.interval, 0.02)
         self.assertEqual(route.health_check.unhealthy_threshold, 2)
+        self.assertIsNone(route.rate_limit)
 
     def test_missing_file_has_clear_error(self) -> None:
         with self.assertRaisesRegex(ConfigError, "cannot read"):
