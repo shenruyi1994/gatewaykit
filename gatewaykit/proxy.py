@@ -36,13 +36,14 @@ class UpstreamResponse:
 
 def proxy_request(
     route: RouteConfig,
+    upstream_url: str,
     method: str,
     request_target: str,
     headers: Mapping[str, str],
     body: Optional[bytes],
 ) -> UpstreamResponse:
     """Forward one request while preserving its method, target, and body."""
-    upstream = urlsplit(route.upstream.targets[0].url)
+    upstream = urlsplit(upstream_url)
     if upstream.scheme == "http":
         connection_class = HTTPConnection
     elif upstream.scheme == "https":

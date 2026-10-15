@@ -26,6 +26,14 @@ class RoutingHTTPTest(unittest.TestCase):
             daemon=True,
         ).start()
 
+        self.products_secondary_upstream = create_mock_upstream()
+        self.addCleanup(self.products_secondary_upstream.server_close)
+        self.addCleanup(self.products_secondary_upstream.shutdown)
+        threading.Thread(
+            target=self.products_secondary_upstream.serve_forever,
+            daemon=True,
+        ).start()
+
         users_route = RouteConfig(
             path="/api/users",
             methods=("GET", "POST"),
@@ -51,7 +59,11 @@ class RoutingHTTPTest(unittest.TestCase):
                         f"{self.products_upstream.server_address[1]}",
                         3,
                     ),
-                    UpstreamTarget("http://127.0.0.1:1", 1),
+                    UpstreamTarget(
+                        "http://127.0.0.1:"
+                        f"{self.products_secondary_upstream.server_address[1]}",
+                        1,
+                    ),
                 ),
                 balance="weighted_round_robin",
             ),
@@ -146,6 +158,22 @@ class RoutingHTTPTest(unittest.TestCase):
 
         self.assertEqual(response.status, HTTPStatus.METHOD_NOT_ALLOWED)
         self.assertEqual(response.getheader("Allow"), "GET")
+
+    def test_product_route_uses_configured_weights(self) -> None:
+        selected_ports = []
+        for _ in range(4):
+            response = self.request("GET", "/api/products/456")
+            selected_ports.append(json.loads(response.read())["upstream_port"])
+
+        self.assertEqual(
+            selected_ports,
+            [
+                self.products_upstream.server_address[1],
+                self.products_upstream.server_address[1],
+                self.products_upstream.server_address[1],
+                self.products_secondary_upstream.server_address[1],
+            ],
+        )
 
     def test_unavailable_product_upstream_returns_502(self) -> None:
         self.products_upstream.shutdown()

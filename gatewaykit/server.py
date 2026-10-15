@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional, Sequence, Type
 
 from gatewaykit.config import RouteConfig
+from gatewaykit.load_balancer import LoadBalancer
 from gatewaykit.proxy import UpstreamError, UpstreamResponse, proxy_request
 from gatewaykit.router import find_route
 
@@ -31,6 +32,8 @@ def make_handler(
     started_at: float,
     routes: Sequence[RouteConfig],
 ) -> Type[BaseHTTPRequestHandler]:
+    load_balancer = LoadBalancer()
+
     class GatewayHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             if self.path.split("?", 1)[0] == "/health":
@@ -74,8 +77,10 @@ def make_handler(
                 if body is None and self.command == "POST":
                     return
                 try:
+                    target = load_balancer.select_target(route)
                     response = proxy_request(
                         route=route,
+                        upstream_url=target.url,
                         method=self.command,
                         request_target=self.path,
                         headers=dict(self.headers.items()),
