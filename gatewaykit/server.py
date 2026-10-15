@@ -39,9 +39,13 @@ def make_handler(started_at: float) -> Type[BaseHTTPRequestHandler]:
     return GatewayHandler
 
 
-def serve(port: int) -> None:
+def create_server(port: int, host: str = "") -> GatewayHTTPServer:
     started_at = time.monotonic()
-    server = GatewayHTTPServer(("", port), make_handler(started_at))
+    return GatewayHTTPServer((host, port), make_handler(started_at))
+
+
+def serve(port: int) -> None:
+    server = create_server(port)
     print(f"GatewayKit listening on http://localhost:{port}", flush=True)
     try:
         server.serve_forever()
