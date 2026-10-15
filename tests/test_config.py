@@ -27,6 +27,23 @@ class ConfigTest(unittest.TestCase):
 
         self.assertEqual(config.port, 9090)
 
+    def test_supplied_config_loads_all_routes(self) -> None:
+        config_path = Path(__file__).parents[1] / "gateway.yaml"
+
+        config = load_config(str(config_path))
+
+        self.assertEqual(config.port, 8080)
+        self.assertEqual(
+            [route.path for route in config.routes],
+            [
+                "/api/users",
+                "/api/orders",
+                "/api/products",
+                "/api/legacy",
+                "/api/internal",
+            ],
+        )
+
     def test_loads_basic_route(self) -> None:
         document = """\
 gateway:
