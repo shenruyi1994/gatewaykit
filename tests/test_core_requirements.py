@@ -42,6 +42,7 @@ gateway:
             host="127.0.0.1",
             global_timeout=self.config.global_timeout,
             global_rate_limit=self.config.global_rate_limit,
+            log_requests=False,
         )
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)

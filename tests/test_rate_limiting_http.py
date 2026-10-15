@@ -57,6 +57,7 @@ class RateLimitingHTTPTest(unittest.TestCase):
             routes=(users, products),
             host="127.0.0.1",
             global_rate_limit=RateLimitConfig(2, 60, "fixed_window", "ip"),
+            log_requests=False,
         )
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)

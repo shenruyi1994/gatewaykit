@@ -11,7 +11,7 @@ from gatewaykit.server import create_server
 
 class HealthEndpointTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.server = create_server(port=0, host="127.0.0.1")
+        self.server = create_server(port=0, host="127.0.0.1", log_requests=False)
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
 

@@ -42,11 +42,16 @@ def make_handler(
     health_monitor: HealthMonitor,
     global_timeout: Optional[float],
     global_rate_limit: Optional[RateLimitConfig],
+    log_requests: bool,
 ) -> Type[BaseHTTPRequestHandler]:
     load_balancer = LoadBalancer()
     rate_limiter = RateLimiter()
 
     class GatewayHandler(BaseHTTPRequestHandler):
+        def log_message(self, format: str, *args: object) -> None:
+            if log_requests:
+                super().log_message(format, *args)
+
         def do_GET(self) -> None:
             if self.path.split("?", 1)[0] == "/health":
                 self._write_json(
@@ -200,6 +205,7 @@ def create_server(
     host: str = "",
     global_timeout: Optional[float] = None,
     global_rate_limit: Optional[RateLimitConfig] = None,
+    log_requests: bool = True,
 ) -> HTTPServer:
     started_at = time.monotonic()
     health_monitor = HealthMonitor(routes)
@@ -211,6 +217,7 @@ def create_server(
             health_monitor,
             global_timeout,
             global_rate_limit,
+            log_requests,
         ),
         health_monitor=health_monitor,
     )

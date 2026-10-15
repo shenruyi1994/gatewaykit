@@ -57,6 +57,7 @@ class ProductHealthCheckTest(unittest.TestCase):
             port=0,
             routes=(self.products_route,),
             host="127.0.0.1",
+            log_requests=False,
         )
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)

@@ -79,6 +79,7 @@ class RoutingHTTPTest(unittest.TestCase):
             routes=(users_route, products_route),
             host="127.0.0.1",
             global_timeout=0.05,
+            log_requests=False,
         )
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)

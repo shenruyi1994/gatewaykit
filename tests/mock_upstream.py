@@ -1,5 +1,6 @@
 """A small upstream HTTP service used by the gateway tests."""
 
+import argparse
 import json
 import time
 from http import HTTPStatus
@@ -77,8 +78,15 @@ def create_mock_upstream(
 
 
 def main() -> None:
-    server = MockUpstreamServer(("127.0.0.1", 3001))
-    print("Mock upstream listening on http://localhost:3001", flush=True)
+    parser = argparse.ArgumentParser(description="Run a GatewayKit mock upstream")
+    parser.add_argument("--port", type=int, default=3001)
+    args = parser.parse_args()
+
+    server = MockUpstreamServer(("127.0.0.1", args.port))
+    print(
+        f"Mock upstream listening on http://localhost:{args.port}",
+        flush=True,
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:
