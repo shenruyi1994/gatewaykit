@@ -4,11 +4,13 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 import yaml
 
 
 DURATION_PATTERN = re.compile(r"^(\d+(?:\.\d+)?)(ms|s|m)$")
+HTTP_METHOD_PATTERN = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 
 
 class ConfigError(ValueError):
@@ -71,11 +73,16 @@ def load_config(path: str) -> GatewayConfig:
     except yaml.YAMLError as error:
         raise ConfigError(f"invalid YAML in {config_path}: {error}") from error
 
-    try:
-        gateway = document["gateway"]
-        port = gateway["port"]
-    except (KeyError, TypeError) as error:
-        raise ConfigError("gateway.port is required") from error
+    if not isinstance(document, dict):
+        raise ConfigError("configuration root must be a mapping")
+
+    gateway = document.get("gateway")
+    if not isinstance(gateway, dict):
+        raise ConfigError("gateway must be a mapping")
+
+    if "port" not in gateway:
+        raise ConfigError("gateway.port is required")
+    port = gateway["port"]
 
     if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
         raise ConfigError("gateway.port must be an integer from 1 to 65535")
@@ -120,10 +127,13 @@ def _load_route(document: Any, index: int) -> RouteConfig:
 
     if not isinstance(path, str) or not path.startswith("/"):
         raise ConfigError(f"{location}.path must start with '/'")
-    if not isinstance(methods, list) or not methods or not all(
-        isinstance(method, str) for method in methods
-    ):
-        raise ConfigError(f"{location}.methods must be a non-empty list of strings")
+    if not isinstance(methods, list) or not methods:
+        raise ConfigError(f"{location}.methods must be a non-empty list")
+    for method_index, method in enumerate(methods):
+        if not isinstance(method, str) or HTTP_METHOD_PATTERN.fullmatch(method) is None:
+            raise ConfigError(
+                f"{location}.methods[{method_index}] must be a valid HTTP method token"
+            )
     if not isinstance(strip_prefix, bool):
         raise ConfigError(f"{location}.strip_prefix must be a boolean")
     upstream = _load_upstream(upstream_document, f"{location}.upstream")
@@ -167,8 +177,7 @@ def _load_upstream(document: Any, location: str) -> UpstreamConfig:
         raise ConfigError(f"{location} cannot contain both url and targets")
 
     if url is not None:
-        if not isinstance(url, str) or not url:
-            raise ConfigError(f"{location}.url must be a non-empty string")
+        url = _validate_upstream_url(url, f"{location}.url")
         return UpstreamConfig(
             targets=(UpstreamTarget(url=url, weight=1),),
             balance=None,
@@ -196,11 +205,30 @@ def _load_target(document: Any, index: int, location: str) -> UpstreamTarget:
 
     url = document.get("url")
     weight = document.get("weight", 1)
-    if not isinstance(url, str) or not url:
-        raise ConfigError(f"{target_location}.url must be a non-empty string")
+    url = _validate_upstream_url(url, f"{target_location}.url")
     if not isinstance(weight, int) or isinstance(weight, bool) or weight < 1:
         raise ConfigError(f"{target_location}.weight must be a positive integer")
     return UpstreamTarget(url=url, weight=weight)
+
+
+def _validate_upstream_url(value: Any, location: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ConfigError(f"{location} must be a non-empty string")
+    if any(character.isspace() for character in value):
+        raise ConfigError(f"{location} must not contain whitespace")
+
+    try:
+        upstream = urlsplit(value)
+        hostname = upstream.hostname
+        upstream.port
+    except ValueError as error:
+        raise ConfigError(f"{location} must be a valid URL: {error}") from error
+
+    if upstream.scheme not in ("http", "https"):
+        raise ConfigError(f"{location} scheme must be http or https")
+    if hostname is None:
+        raise ConfigError(f"{location} must include a hostname")
+    return value
 
 
 def _parse_duration(value: Any, location: str) -> float:
