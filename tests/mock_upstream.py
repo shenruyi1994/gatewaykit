@@ -17,6 +17,15 @@ class MockUpstreamHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         self._echo_request()
 
+    def do_PUT(self) -> None:
+        self._echo_request()
+
+    def do_PATCH(self) -> None:
+        self._echo_request()
+
+    def do_DELETE(self) -> None:
+        self._echo_request()
+
     def _health_response(self) -> None:
         status = self.server.health_status
         body = json.dumps(

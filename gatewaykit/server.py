@@ -34,6 +34,8 @@ RESPONSE_HEADERS_NOT_FORWARDED = {
     "upgrade",
 }
 DEFAULT_UPSTREAM_TIMEOUT = 30.0
+PROXY_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
+BODY_METHODS = {"POST", "PUT", "PATCH"}
 
 
 def make_handler(
@@ -99,9 +101,13 @@ def make_handler(
                     )
                     return
 
-            if self.command in ("GET", "POST"):
-                body = self._read_request_body() if self.command == "POST" else None
-                if body is None and self.command == "POST":
+            if self.command in PROXY_METHODS:
+                body = (
+                    self._read_request_body()
+                    if self.command in BODY_METHODS
+                    else None
+                )
+                if body is None and self.command in BODY_METHODS:
                     return
                 try:
                     target = load_balancer.select_target(
