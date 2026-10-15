@@ -26,7 +26,7 @@ gateway:
   global_timeout: 1s
   routes:
     - path: /different/widgets
-      methods: [PUT]
+      methods: [PURGE]
       strip_prefix: false
       upstream:
         url: http://127.0.0.1:{self.upstream.server_address[1]}
@@ -68,14 +68,14 @@ gateway:
 
         request_body = '{"name":"alternate"}'
         proxied = self.request(
-            "PUT",
+            "PURGE",
             "/different/widgets/123",
             body=request_body,
             headers={"Content-Type": "application/json"},
         )
         proxied_body = json.loads(proxied.read())
         self.assertEqual(proxied.status, HTTPStatus.OK)
-        self.assertEqual(proxied_body["method"], "PUT")
+        self.assertEqual(proxied_body["method"], "PURGE")
         self.assertEqual(proxied_body["path"], "/different/widgets/123")
         self.assertEqual(proxied_body["body"], request_body)
 

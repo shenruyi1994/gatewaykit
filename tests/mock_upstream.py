@@ -14,17 +14,10 @@ class MockUpstreamHandler(BaseHTTPRequestHandler):
             return
         self._echo_request()
 
-    def do_POST(self) -> None:
-        self._echo_request()
-
-    def do_PUT(self) -> None:
-        self._echo_request()
-
-    def do_PATCH(self) -> None:
-        self._echo_request()
-
-    def do_DELETE(self) -> None:
-        self._echo_request()
+    def __getattr__(self, name: str):
+        if name.startswith("do_"):
+            return self._echo_request
+        raise AttributeError(name)
 
     def _health_response(self) -> None:
         status = self.server.health_status

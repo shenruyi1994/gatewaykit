@@ -6,7 +6,7 @@ import json
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Optional, Sequence, Type
+from typing import Optional, Sequence, Tuple, Type
 
 from gatewaykit.config import RateLimitConfig, RouteConfig
 from gatewaykit.health import HealthMonitor
@@ -34,8 +34,6 @@ RESPONSE_HEADERS_NOT_FORWARDED = {
     "upgrade",
 }
 DEFAULT_UPSTREAM_TIMEOUT = 30.0
-PROXY_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
-BODY_METHODS = {"POST", "PUT", "PATCH"}
 
 
 def make_handler(
@@ -62,17 +60,10 @@ def make_handler(
 
             self._handle_route()
 
-        def do_POST(self) -> None:
-            self._handle_route()
-
-        def do_PUT(self) -> None:
-            self._handle_route()
-
-        def do_PATCH(self) -> None:
-            self._handle_route()
-
-        def do_DELETE(self) -> None:
-            self._handle_route()
+        def __getattr__(self, name: str):
+            if name.startswith("do_"):
+                return self._handle_route
+            raise AttributeError(name)
 
         def _handle_route(self) -> None:
             route = find_route(self.path, routes)
@@ -101,69 +92,66 @@ def make_handler(
                     )
                     return
 
-            if self.command in PROXY_METHODS:
-                body = (
-                    self._read_request_body()
-                    if self.command in BODY_METHODS
-                    else None
-                )
-                if body is None and self.command in BODY_METHODS:
-                    return
-                try:
-                    target = load_balancer.select_target(
-                        route,
-                        is_healthy=lambda candidate: health_monitor.is_healthy(
-                            route,
-                            candidate,
-                        ),
-                    )
-                    response = proxy_request(
-                        route=route,
-                        upstream_url=target.url,
-                        method=self.command,
-                        request_target=self.path,
-                        headers=dict(self.headers.items()),
-                        body=body,
-                        timeout=(
-                            route.timeout
-                            if route.timeout is not None
-                            else global_timeout or DEFAULT_UPSTREAM_TIMEOUT
-                        ),
-                    )
-                except NoHealthyTargets:
-                    self._write_json(
-                        HTTPStatus.SERVICE_UNAVAILABLE,
-                        {"error": "no_healthy_upstreams"},
-                    )
-                    return
-                except UpstreamTimeout:
-                    self._write_json(
-                        HTTPStatus.GATEWAY_TIMEOUT,
-                        {"error": "gateway_timeout"},
-                    )
-                    return
-                except UpstreamError:
-                    self._write_json(
-                        HTTPStatus.BAD_GATEWAY,
-                        {"error": "bad_gateway"},
-                    )
-                    return
-                self._write_upstream_response(response)
+            body_is_valid, body = self._read_request_body()
+            if not body_is_valid:
                 return
 
-            self.send_error(HTTPStatus.NOT_IMPLEMENTED, "proxying not implemented")
-
-        def _read_request_body(self) -> Optional[bytes]:
             try:
-                content_length = int(self.headers.get("Content-Length", "0"))
+                target = load_balancer.select_target(
+                    route,
+                    is_healthy=lambda candidate: health_monitor.is_healthy(
+                        route,
+                        candidate,
+                    ),
+                )
+                response = proxy_request(
+                    route=route,
+                    upstream_url=target.url,
+                    method=self.command,
+                    request_target=self.path,
+                    headers=dict(self.headers.items()),
+                    body=body,
+                    timeout=(
+                        route.timeout
+                        if route.timeout is not None
+                        else global_timeout or DEFAULT_UPSTREAM_TIMEOUT
+                    ),
+                )
+            except NoHealthyTargets:
+                self._write_json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"error": "no_healthy_upstreams"},
+                )
+                return
+            except UpstreamTimeout:
+                self._write_json(
+                    HTTPStatus.GATEWAY_TIMEOUT,
+                    {"error": "gateway_timeout"},
+                )
+                return
+            except UpstreamError:
+                self._write_json(
+                    HTTPStatus.BAD_GATEWAY,
+                    {"error": "bad_gateway"},
+                )
+                return
+            self._write_upstream_response(response)
+
+        def _read_request_body(self) -> Tuple[bool, Optional[bytes]]:
+            content_length_header = self.headers.get("Content-Length")
+            if content_length_header is None:
+                return True, None
+
+            try:
+                content_length = int(content_length_header)
             except ValueError:
                 self.send_error(HTTPStatus.BAD_REQUEST, "invalid Content-Length")
-                return None
+                return False, None
 
             if content_length < 0:
                 self.send_error(HTTPStatus.BAD_REQUEST, "invalid Content-Length")
-                return None
-            return self.rfile.read(content_length)
+                return False, None
+            return True, self.rfile.read(content_length)
 
         def _write_upstream_response(self, response: UpstreamResponse) -> None:
             self.send_response(response.status, response.reason)
@@ -171,7 +159,8 @@ def make_handler(
                 if name.lower() not in RESPONSE_HEADERS_NOT_FORWARDED:
                     self.send_header(name, value)
             self.end_headers()
-            self.wfile.write(response.body)
+            if self.command != "HEAD":
+                self.wfile.write(response.body)
 
         def _write_json(
             self,
