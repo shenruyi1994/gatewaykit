@@ -5,12 +5,8 @@ from __future__ import annotations
 import json
 import time
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Type
-
-
-class GatewayHTTPServer(ThreadingHTTPServer):
-    daemon_threads = True
 
 
 def make_handler(started_at: float) -> Type[BaseHTTPRequestHandler]:
@@ -39,9 +35,9 @@ def make_handler(started_at: float) -> Type[BaseHTTPRequestHandler]:
     return GatewayHandler
 
 
-def create_server(port: int, host: str = "") -> GatewayHTTPServer:
+def create_server(port: int, host: str = "") -> HTTPServer:
     started_at = time.monotonic()
-    return GatewayHTTPServer((host, port), make_handler(started_at))
+    return HTTPServer((host, port), make_handler(started_at))
 
 
 def serve(port: int) -> None:
