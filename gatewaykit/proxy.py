@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from typing import List, Mapping, Optional, Tuple
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from gatewaykit.config import RouteConfig
 
@@ -59,11 +59,12 @@ def proxy_request(
         if name.lower() not in REQUEST_HEADERS_NOT_FORWARDED
     }
 
+    upstream_target = _upstream_target(route, request_target)
     connection = connection_class(upstream.hostname, upstream.port)
     try:
         connection.request(
             method,
-            request_target,
+            upstream_target,
             body=body,
             headers=forwarded_headers,
         )
@@ -78,3 +79,12 @@ def proxy_request(
         raise UpstreamError(f"upstream request failed: {error}") from error
     finally:
         connection.close()
+
+
+def _upstream_target(route: RouteConfig, request_target: str) -> str:
+    if not route.strip_prefix:
+        return request_target
+
+    target = urlsplit(request_target)
+    stripped_path = target.path[len(route.path) :] or "/"
+    return urlunsplit(("", "", stripped_path, target.query, ""))

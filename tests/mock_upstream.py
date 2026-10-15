@@ -22,6 +22,7 @@ class MockUpstreamHandler(BaseHTTPRequestHandler):
                 "body": request_body,
                 "content_type": self.headers.get("Content-Type"),
                 "request_id": self.headers.get("X-Request-ID"),
+                "upstream_port": self.server.server_address[1],
             },
             separators=(",", ":"),
         ).encode("utf-8")

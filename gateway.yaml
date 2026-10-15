@@ -6,3 +6,8 @@ gateway:
       strip_prefix: false
       upstream:
         url: "http://localhost:3001"
+    - path: "/api/products"
+      methods: ["GET"]
+      strip_prefix: true
+      upstream:
+        url: "http://localhost:3003"

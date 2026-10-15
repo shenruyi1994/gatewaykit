@@ -18,15 +18,31 @@ class RoutingHTTPTest(unittest.TestCase):
         self.addCleanup(self.upstream.shutdown)
         threading.Thread(target=self.upstream.serve_forever, daemon=True).start()
 
+        self.products_upstream = create_mock_upstream()
+        self.addCleanup(self.products_upstream.server_close)
+        self.addCleanup(self.products_upstream.shutdown)
+        threading.Thread(
+            target=self.products_upstream.serve_forever,
+            daemon=True,
+        ).start()
+
         users_route = RouteConfig(
             path="/api/users",
             methods=("GET", "POST"),
             strip_prefix=False,
             upstream_url=f"http://127.0.0.1:{self.upstream.server_address[1]}",
         )
+        products_route = RouteConfig(
+            path="/api/products",
+            methods=("GET",),
+            strip_prefix=True,
+            upstream_url=(
+                f"http://127.0.0.1:{self.products_upstream.server_address[1]}"
+            ),
+        )
         self.server = create_server(
             port=0,
-            routes=(users_route,),
+            routes=(users_route, products_route),
             host="127.0.0.1",
         )
         self.addCleanup(self.server.server_close)
@@ -84,6 +100,46 @@ class RoutingHTTPTest(unittest.TestCase):
         self.assertEqual(body["body"], request_body)
         self.assertEqual(body["content_type"], "application/json")
         self.assertEqual(body["request_id"], "request-123")
+
+    def test_product_route_selects_upstream_and_strips_prefix(self) -> None:
+        users_response = self.request("GET", "/api/users")
+        users_body = json.loads(users_response.read())
+        products_response = self.request(
+            "GET",
+            "/api/products/456?currency=usd",
+        )
+        products_body = json.loads(products_response.read())
+
+        self.assertEqual(
+            users_body["upstream_port"],
+            self.upstream.server_address[1],
+        )
+        self.assertEqual(
+            products_body["upstream_port"],
+            self.products_upstream.server_address[1],
+        )
+        self.assertEqual(products_body["path"], "/456?currency=usd")
+
+        product_root_response = self.request("GET", "/api/products")
+        product_root_body = json.loads(product_root_response.read())
+        self.assertEqual(product_root_body["path"], "/")
+
+    def test_product_route_rejects_disallowed_method(self) -> None:
+        response = self.request("POST", "/api/products")
+        response.read()
+
+        self.assertEqual(response.status, HTTPStatus.METHOD_NOT_ALLOWED)
+        self.assertEqual(response.getheader("Allow"), "GET")
+
+    def test_unavailable_product_upstream_returns_502(self) -> None:
+        self.products_upstream.shutdown()
+        self.products_upstream.server_close()
+
+        response = self.request("GET", "/api/products/456")
+        body = json.loads(response.read())
+
+        self.assertEqual(response.status, HTTPStatus.BAD_GATEWAY)
+        self.assertEqual(body, {"error": "bad_gateway"})
 
     def test_unavailable_upstream_returns_502(self) -> None:
         self.upstream.shutdown()
