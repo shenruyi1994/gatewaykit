@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional, Sequence, Type
 
 from gatewaykit.config import RouteConfig
-from gatewaykit.proxy import UpstreamResponse, proxy_request
+from gatewaykit.proxy import UpstreamError, UpstreamResponse, proxy_request
 from gatewaykit.router import find_route
 
 
@@ -73,13 +73,20 @@ def make_handler(
                 body = self._read_request_body() if self.command == "POST" else None
                 if body is None and self.command == "POST":
                     return
-                response = proxy_request(
-                    route=route,
-                    method=self.command,
-                    request_target=self.path,
-                    headers=dict(self.headers.items()),
-                    body=body,
-                )
+                try:
+                    response = proxy_request(
+                        route=route,
+                        method=self.command,
+                        request_target=self.path,
+                        headers=dict(self.headers.items()),
+                        body=body,
+                    )
+                except UpstreamError:
+                    self._write_json(
+                        HTTPStatus.BAD_GATEWAY,
+                        {"error": "bad_gateway"},
+                    )
+                    return
                 self._write_upstream_response(response)
                 return
 

@@ -85,6 +85,16 @@ class RoutingHTTPTest(unittest.TestCase):
         self.assertEqual(body["content_type"], "application/json")
         self.assertEqual(body["request_id"], "request-123")
 
+    def test_unavailable_upstream_returns_502(self) -> None:
+        self.upstream.shutdown()
+        self.upstream.server_close()
+
+        response = self.request("GET", "/api/users")
+        body = json.loads(response.read())
+
+        self.assertEqual(response.status, HTTPStatus.BAD_GATEWAY)
+        self.assertEqual(body, {"error": "bad_gateway"})
+
 
 if __name__ == "__main__":
     unittest.main()

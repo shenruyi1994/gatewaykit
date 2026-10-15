@@ -1,7 +1,7 @@
 """Forward requests to a route's upstream service."""
 
 from dataclasses import dataclass
-from http.client import HTTPConnection, HTTPSConnection
+from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from typing import List, Mapping, Optional, Tuple
 from urllib.parse import urlsplit
 
@@ -20,6 +20,10 @@ REQUEST_HEADERS_NOT_FORWARDED = {
     "transfer-encoding",
     "upgrade",
 }
+
+
+class UpstreamError(RuntimeError):
+    """Raised when an upstream request fails at the HTTP transport layer."""
 
 
 @dataclass(frozen=True)
@@ -70,5 +74,7 @@ def proxy_request(
             headers=response.getheaders(),
             body=response.read(),
         )
+    except (HTTPException, OSError) as error:
+        raise UpstreamError(f"upstream request failed: {error}") from error
     finally:
         connection.close()
