@@ -6,10 +6,10 @@ import json
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Sequence, Type
+from typing import Optional, Sequence, Type
 
 from gatewaykit.config import RouteConfig
-from gatewaykit.proxy import UpstreamResponse, proxy_get
+from gatewaykit.proxy import UpstreamResponse, proxy_request
 from gatewaykit.router import find_route
 
 
@@ -69,11 +69,33 @@ def make_handler(
                 self.end_headers()
                 return
 
-            if self.command == "GET":
-                self._write_upstream_response(proxy_get(route, self.path))
+            if self.command in ("GET", "POST"):
+                body = self._read_request_body() if self.command == "POST" else None
+                if body is None and self.command == "POST":
+                    return
+                response = proxy_request(
+                    route=route,
+                    method=self.command,
+                    request_target=self.path,
+                    headers=dict(self.headers.items()),
+                    body=body,
+                )
+                self._write_upstream_response(response)
                 return
 
             self.send_error(HTTPStatus.NOT_IMPLEMENTED, "proxying not implemented")
+
+        def _read_request_body(self) -> Optional[bytes]:
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                self.send_error(HTTPStatus.BAD_REQUEST, "invalid Content-Length")
+                return None
+
+            if content_length < 0:
+                self.send_error(HTTPStatus.BAD_REQUEST, "invalid Content-Length")
+                return None
+            return self.rfile.read(content_length)
 
         def _write_upstream_response(self, response: UpstreamResponse) -> None:
             self.send_response(response.status, response.reason)

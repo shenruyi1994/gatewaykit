@@ -2,10 +2,24 @@
 
 from dataclasses import dataclass
 from http.client import HTTPConnection, HTTPSConnection
-from typing import List, Tuple
+from typing import List, Mapping, Optional, Tuple
 from urllib.parse import urlsplit
 
 from gatewaykit.config import RouteConfig
+
+
+REQUEST_HEADERS_NOT_FORWARDED = {
+    "connection",
+    "content-length",
+    "host",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+}
 
 
 @dataclass(frozen=True)
@@ -16,8 +30,14 @@ class UpstreamResponse:
     body: bytes
 
 
-def proxy_get(route: RouteConfig, request_target: str) -> UpstreamResponse:
-    """Forward one GET request while preserving its path and query string."""
+def proxy_request(
+    route: RouteConfig,
+    method: str,
+    request_target: str,
+    headers: Mapping[str, str],
+    body: Optional[bytes],
+) -> UpstreamResponse:
+    """Forward one request while preserving its method, target, and body."""
     upstream = urlsplit(route.upstream_url)
     if upstream.scheme == "http":
         connection_class = HTTPConnection
@@ -29,9 +49,20 @@ def proxy_get(route: RouteConfig, request_target: str) -> UpstreamResponse:
     if upstream.hostname is None:
         raise ValueError("upstream URL must include a hostname")
 
+    forwarded_headers = {
+        name: value
+        for name, value in headers.items()
+        if name.lower() not in REQUEST_HEADERS_NOT_FORWARDED
+    }
+
     connection = connection_class(upstream.hostname, upstream.port)
     try:
-        connection.request("GET", request_target)
+        connection.request(
+            method,
+            request_target,
+            body=body,
+            headers=forwarded_headers,
+        )
         response = connection.getresponse()
         return UpstreamResponse(
             status=response.status,
@@ -41,4 +72,3 @@ def proxy_get(route: RouteConfig, request_target: str) -> UpstreamResponse:
         )
     finally:
         connection.close()
-
