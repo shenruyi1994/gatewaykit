@@ -19,7 +19,7 @@ def main() -> None:
     except ConfigError as error:
         raise SystemExit(f"configuration error: {error}") from error
 
-    serve(port=config.port)
+    serve(port=config.port, routes=config.routes)
 
 
 if __name__ == "__main__":
