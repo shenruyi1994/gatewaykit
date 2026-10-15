@@ -39,7 +39,37 @@ gateway:
         self.assertEqual(route.path, "/api/users")
         self.assertEqual(route.methods, ("GET", "POST"))
         self.assertFalse(route.strip_prefix)
-        self.assertEqual(route.upstream_url, "http://localhost:3001")
+        self.assertEqual(route.upstream.targets[0].url, "http://localhost:3001")
+        self.assertEqual(route.upstream.targets[0].weight, 1)
+        self.assertIsNone(route.upstream.balance)
+
+    def test_loads_multiple_upstream_targets(self) -> None:
+        document = """\
+gateway:
+  port: 8080
+  routes:
+    - path: /api/products
+      methods: [GET]
+      strip_prefix: true
+      upstream:
+        targets:
+          - url: http://localhost:3003
+            weight: 3
+          - url: http://localhost:3004
+            weight: 1
+        balance: weighted_round_robin
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "gateway.yaml"
+            config_path.write_text(document, encoding="utf-8")
+
+            route = load_config(str(config_path)).routes[0]
+
+        self.assertEqual(
+            [(target.url, target.weight) for target in route.upstream.targets],
+            [("http://localhost:3003", 3), ("http://localhost:3004", 1)],
+        )
+        self.assertEqual(route.upstream.balance, "weighted_round_robin")
 
     def test_missing_file_has_clear_error(self) -> None:
         with self.assertRaisesRegex(ConfigError, "cannot read"):

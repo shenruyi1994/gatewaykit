@@ -2,7 +2,7 @@
 
 import unittest
 
-from gatewaykit.config import RouteConfig
+from gatewaykit.config import RouteConfig, UpstreamConfig, UpstreamTarget
 from gatewaykit.router import find_route
 
 
@@ -11,7 +11,10 @@ def route(path: str) -> RouteConfig:
         path=path,
         methods=("GET",),
         strip_prefix=False,
-        upstream_url="http://localhost:3001",
+        upstream=UpstreamConfig(
+            targets=(UpstreamTarget("http://localhost:3001", 1),),
+            balance=None,
+        ),
     )
 
 

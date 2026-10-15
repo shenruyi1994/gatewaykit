@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
 
@@ -12,11 +12,23 @@ class ConfigError(ValueError):
 
 
 @dataclass(frozen=True)
+class UpstreamTarget:
+    url: str
+    weight: int
+
+
+@dataclass(frozen=True)
+class UpstreamConfig:
+    targets: tuple[UpstreamTarget, ...]
+    balance: Optional[str]
+
+
+@dataclass(frozen=True)
 class RouteConfig:
     path: str
     methods: tuple[str, ...]
     strip_prefix: bool
-    upstream_url: str
+    upstream: UpstreamConfig
 
 
 @dataclass(frozen=True)
@@ -60,8 +72,7 @@ def _load_route(document: Any, index: int) -> RouteConfig:
     path = document.get("path")
     methods = document.get("methods")
     strip_prefix = document.get("strip_prefix", False)
-    upstream = document.get("upstream")
-    upstream_url = upstream.get("url") if isinstance(upstream, dict) else None
+    upstream_document = document.get("upstream")
 
     if not isinstance(path, str) or not path.startswith("/"):
         raise ConfigError(f"{location}.path must start with '/'")
@@ -71,12 +82,57 @@ def _load_route(document: Any, index: int) -> RouteConfig:
         raise ConfigError(f"{location}.methods must be a non-empty list of strings")
     if not isinstance(strip_prefix, bool):
         raise ConfigError(f"{location}.strip_prefix must be a boolean")
-    if not isinstance(upstream_url, str) or not upstream_url:
-        raise ConfigError(f"{location}.upstream.url is required")
+    upstream = _load_upstream(upstream_document, f"{location}.upstream")
 
     return RouteConfig(
         path=path,
         methods=tuple(method.upper() for method in methods),
         strip_prefix=strip_prefix,
-        upstream_url=upstream_url,
+        upstream=upstream,
     )
+
+
+def _load_upstream(document: Any, location: str) -> UpstreamConfig:
+    if not isinstance(document, dict):
+        raise ConfigError(f"{location} must be a mapping")
+
+    url = document.get("url")
+    targets_document = document.get("targets")
+    if url is not None and targets_document is not None:
+        raise ConfigError(f"{location} cannot contain both url and targets")
+
+    if url is not None:
+        if not isinstance(url, str) or not url:
+            raise ConfigError(f"{location}.url must be a non-empty string")
+        return UpstreamConfig(
+            targets=(UpstreamTarget(url=url, weight=1),),
+            balance=None,
+        )
+
+    if not isinstance(targets_document, list) or not targets_document:
+        raise ConfigError(f"{location}.targets must be a non-empty list")
+
+    targets = tuple(
+        _load_target(target, index, location)
+        for index, target in enumerate(targets_document)
+    )
+    balance = document.get("balance")
+    if balance not in ("round_robin", "weighted_round_robin"):
+        raise ConfigError(
+            f"{location}.balance must be round_robin or weighted_round_robin"
+        )
+    return UpstreamConfig(targets=targets, balance=balance)
+
+
+def _load_target(document: Any, index: int, location: str) -> UpstreamTarget:
+    target_location = f"{location}.targets[{index}]"
+    if not isinstance(document, dict):
+        raise ConfigError(f"{target_location} must be a mapping")
+
+    url = document.get("url")
+    weight = document.get("weight", 1)
+    if not isinstance(url, str) or not url:
+        raise ConfigError(f"{target_location}.url must be a non-empty string")
+    if not isinstance(weight, int) or isinstance(weight, bool) or weight < 1:
+        raise ConfigError(f"{target_location}.weight must be a positive integer")
+    return UpstreamTarget(url=url, weight=weight)

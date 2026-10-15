@@ -10,4 +10,9 @@ gateway:
       methods: ["GET"]
       strip_prefix: true
       upstream:
-        url: "http://localhost:3003"
+        targets:
+          - url: "http://localhost:3003"
+            weight: 3
+          - url: "http://localhost:3004"
+            weight: 1
+        balance: "weighted_round_robin"

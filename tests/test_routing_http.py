@@ -6,7 +6,7 @@ import unittest
 from http import HTTPStatus
 from http.client import HTTPConnection
 
-from gatewaykit.config import RouteConfig
+from gatewaykit.config import RouteConfig, UpstreamConfig, UpstreamTarget
 from gatewaykit.server import create_server
 from tests.mock_upstream import create_mock_upstream
 
@@ -30,14 +30,30 @@ class RoutingHTTPTest(unittest.TestCase):
             path="/api/users",
             methods=("GET", "POST"),
             strip_prefix=False,
-            upstream_url=f"http://127.0.0.1:{self.upstream.server_address[1]}",
+            upstream=UpstreamConfig(
+                targets=(
+                    UpstreamTarget(
+                        f"http://127.0.0.1:{self.upstream.server_address[1]}",
+                        1,
+                    ),
+                ),
+                balance=None,
+            ),
         )
         products_route = RouteConfig(
             path="/api/products",
             methods=("GET",),
             strip_prefix=True,
-            upstream_url=(
-                f"http://127.0.0.1:{self.products_upstream.server_address[1]}"
+            upstream=UpstreamConfig(
+                targets=(
+                    UpstreamTarget(
+                        "http://127.0.0.1:"
+                        f"{self.products_upstream.server_address[1]}",
+                        3,
+                    ),
+                    UpstreamTarget("http://127.0.0.1:1", 1),
+                ),
+                balance="weighted_round_robin",
             ),
         )
         self.server = create_server(
