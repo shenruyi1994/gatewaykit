@@ -37,3 +37,18 @@ class MockUpstreamHandler(BaseHTTPRequestHandler):
 
 def create_mock_upstream() -> HTTPServer:
     return HTTPServer(("127.0.0.1", 0), MockUpstreamHandler)
+
+
+def main() -> None:
+    server = HTTPServer(("127.0.0.1", 3001), MockUpstreamHandler)
+    print("Mock upstream listening on http://localhost:3001", flush=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
